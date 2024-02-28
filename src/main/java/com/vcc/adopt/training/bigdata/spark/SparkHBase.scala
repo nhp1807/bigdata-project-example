@@ -323,7 +323,7 @@ object SparkHBase {
 
     // Thực hiện truy vấn
     //      val statement = connection.createStatement()
-    val rowCountQuery = "SELECT COUNT (*) AS row_count FROM (SELECT concat(de.dept_no,\"_\", de.emp_no) as dept_emp, de.from_date as de_from_date, de.to_date as de_to_date, e.emp_no, e.birth_date, e.first_name, e.last_name, e.gender, e.hire_date, d.dept_no, d.dept_name, dm.from_date as dm_from_date, dm.to_date as dm_to_date FROM dept_emp de\nleft join employees e on de.emp_no = e.emp_no\nleft join departments d on de.dept_no = d.dept_no\nleft join dept_manager dm on de.dept_no = dm.dept_no and de.emp_no = dm.emp_no);"
+    val rowCountQuery = "SELECT COUNT(*) AS row_count\nFROM (\n    SELECT\n        CONCAT(de.dept_no, \"_\", de.emp_no) AS dept_emp,\n        de.from_date AS de_from_date,\n        de.to_date AS de_to_date,\n        e.emp_no,\n        e.birth_date,\n        e.first_name,\n        e.last_name,\n        e.gender,\n        e.hire_date,\n        d.dept_no,\n        d.dept_name,\n        dm.from_date AS dm_from_date,\n        dm.to_date AS dm_to_date\n    FROM dept_emp de\n    LEFT JOIN employees e ON de.emp_no = e.emp_no\n    LEFT JOIN departments d ON de.dept_no = d.dept_no\n    LEFT JOIN dept_manager dm ON de.dept_no = dm.dept_no AND de.emp_no = dm.emp_no\n) AS subquery;"
     val rowCountStatement = connection1.createStatement()
     val rowCountResultSet = rowCountStatement.executeQuery(rowCountQuery)
     rowCountResultSet.next()
