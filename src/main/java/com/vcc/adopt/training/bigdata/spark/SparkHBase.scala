@@ -317,7 +317,7 @@ object SparkHBase {
     // Load driver
     Class.forName("com.mysql.cj.jdbc.Driver")
 
-    val batchSize = 100000 // Số lượng dòng dữ liệu mỗi lần truy vấn
+    val batchSize = 50000 // Số lượng dòng dữ liệu mỗi lần truy vấn
     // Tạo kết nối
     connection1 = DriverManager.getConnection(url, username, password)
 
