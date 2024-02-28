@@ -1,8 +1,8 @@
 spark-submit \
   --master local[*] \
   --deploy-mode client \
-  --driver-memory 1G \
-  --executor-memory 1G \
+  --driver-memory 2G \
+  --executor-memory 2G \
   --executor-cores 1 \
   --num-executors 2 \
   --conf spark.kryoserializer.buffer.max=1g \
