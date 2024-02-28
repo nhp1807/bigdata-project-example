@@ -27,6 +27,7 @@ object SparkHBase {
   private val username = ConfigPropertiesLoader.getYamlConfig.getProperty("username")
   private val password = ConfigPropertiesLoader.getYamlConfig.getProperty("password")
   var connection: Connection = null
+  var connection1: Connection = null
   var resultSet: ResultSet = null
 
   val schema = StructType(Seq(
@@ -100,14 +101,14 @@ object SparkHBase {
     df.show()
     df = df
       .withColumn("country", lit("US"))
-      .repartition(5)  // chia dataframe thành 5 phân vùng, mỗi phân vùng sẽ được chạy trên một worker (nếu không chia mặc định là 200)
+      .repartition(5) // chia dataframe thành 5 phân vùng, mỗi phân vùng sẽ được chạy trên một worker (nếu không chia mặc định là 200)
 
-    val batchPutSize = 100  // để đẩy dữ liệu vào hbase nhanh, thay vì đẩy lẻ tẻ từng dòng thì ta đẩy theo lô, như ví dụ là cứ 100 dòng sẽ đẩy 1ần
+    val batchPutSize = 100 // để đẩy dữ liệu vào hbase nhanh, thay vì đẩy lẻ tẻ từng dòng thì ta đẩy theo lô, như ví dụ là cứ 100 dòng sẽ đẩy 1ần
     df.foreachPartition((rows: Iterator[Row]) => {
       // tạo connection hbase buộc phải tạo bên trong mỗi partition (không được tạo bên ngoài). Tối ưu hơn sẽ dùng connectionPool để reuse lại connection trên các worker
       val hbaseConnection = HBaseConnectionFactory.createConnection()
       try {
-//        val table = hbaseConnection.getTable(TableName.valueOf("bai4", "pageviewlog"))
+        //        val table = hbaseConnection.getTable(TableName.valueOf("bai4", "pageviewlog"))
         val table = hbaseConnection.getTable(TableName.valueOf("bai4", "pageviewlog"))
         val puts = new util.ArrayList[Put]()
         for (row <- rows) {
@@ -155,11 +156,11 @@ object SparkHBase {
           put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("category"), Bytes.toBytes(category))
 
           puts.add(put)
-          if(puts.size() > batchPutSize){
+          if (puts.size() > batchPutSize) {
             table.put(puts)
             puts.clear()
           }
-          if(puts.size() > 0){
+          if (puts.size() > 0) {
             table.put(puts)
           }
         }
@@ -187,7 +188,7 @@ object SparkHBase {
         val path = Bytes.toString(result.getValue(Bytes.toBytes("cf"), Bytes.toBytes("path")))
         println(path)
       })
-    }finally {
+    } finally {
       hbaseConnection.close()
     }
 
@@ -207,11 +208,11 @@ object SparkHBase {
           rows.map(row => {
             val get = new Get(Bytes.toBytes(Option(row.getAs[java.sql.Timestamp]("cookieCreate")).map(_.getTime).getOrElse(0L)))
             get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("guid"))
-            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("ip"))  // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
+            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("ip")) // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
             (Bytes.toLong(table.get(get).getValue(Bytes.toBytes("cf"), Bytes.toBytes("guid"))),
               Bytes.toLong(table.get(get).getValue(Bytes.toBytes("cf"), Bytes.toBytes("ip"))))
           })
-        }finally {
+        } finally {
           //          hbaseConnection.close()
         }
       }).toDF("guid", "ip")
@@ -238,11 +239,11 @@ object SparkHBase {
           rows.map(row => {
             val get = new Get(Bytes.toBytes(Option(row.getAs[java.sql.Timestamp]("cookieCreate")).map(_.getTime).getOrElse(0L)))
             get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("guid"))
-            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("timeCreate"))  // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
-            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("ip"))  // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
+            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("timeCreate")) // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
+            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("ip")) // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
             (Bytes.toLong(table.get(get).getValue(Bytes.toBytes("cf"), Bytes.toBytes("guid"))), Bytes.toLong(table.get(get).getValue(Bytes.toBytes("cf"), Bytes.toBytes("timeCreate"))), Bytes.toLong(table.get(get).getValue(Bytes.toBytes("cf"), Bytes.toBytes("ip"))))
           })
-        }finally {
+        } finally {
           //          hbaseConnection.close()
         }
       }).toDF("guid", "timeCreate", "ip")
@@ -274,8 +275,8 @@ object SparkHBase {
           rows.map(row => {
             val get = new Get(Bytes.toBytes(Option(row.getAs[java.sql.Timestamp]("cookieCreate")).map(_.getTime).getOrElse(0L)))
             get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("guid"))
-            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("timeCreate"))  // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
-            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("osCode"))  // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
+            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("timeCreate")) // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
+            get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("osCode")) // mặc định sẽ lấy ra tất cả các cột, dùng lệnh này giúp chỉ lấy cột age
             get.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("browserCode"))
             (Bytes.toLong(table.get(get).getValue(Bytes.toBytes("cf"), Bytes.toBytes("guid"))),
               Bytes.toLong(table.get(get).getValue(Bytes.toBytes("cf"), Bytes.toBytes("timeCreate"))),
@@ -283,7 +284,7 @@ object SparkHBase {
               Bytes.toInt(table.get(get).getValue(Bytes.toBytes("cf"), Bytes.toBytes("browserCode")))
             )
           })
-        }finally {
+        } finally {
           //          hbaseConnection.close()
         }
       }).toDF("guid", "timeCreate", "osCode", "browserCode")
@@ -297,7 +298,8 @@ object SparkHBase {
   }
 
   // Exercise 5
-  var deptEmp : DataFrame = null
+  var deptEmp: DataFrame = null
+
   def resultSetToDataFrame(resultSet: ResultSet): DataFrame = {
     import spark.implicits._
     val rows = Iterator.continually(resultSet).takeWhile(_.next()).map { row =>
@@ -306,118 +308,136 @@ object SparkHBase {
     val df = rows.toSeq.toDF("dept_no", "emp_no")
     df
   }
-  private def readMySqlThenPutToHBase(): Unit = {
+
+  private def readMySqlDeptEmp(): Unit = {
     println("----- Read employees on mySql then put to table bai5:deptemp ----")
 
-    var deptEmp : DataFrame = null
+    var deptEmp: DataFrame = null
 
-    try {
-      // Load driver
-      Class.forName("com.mysql.cj.jdbc.Driver")
+    // Load driver
+    Class.forName("com.mysql.cj.jdbc.Driver")
 
-      // Tạo kết nối
-      connection = DriverManager.getConnection(url, username, password)
+    val batchSize = 100000 // Số lượng dòng dữ liệu mỗi lần truy vấn
+    // Tạo kết nối
+    connection1 = DriverManager.getConnection(url, username, password)
 
-      // Thực hiện truy vấn
-      val statement = connection.createStatement()
-      val query = "SELECT concat(de.dept_no,\"_\", de.emp_no) as dept_emp, de.from_date as de_from_date, de.to_date as de_to_date, e.emp_no, e.birth_date, e.first_name, e.last_name, e.gender, e.hire_date, d.dept_no, d.dept_name, dm.from_date as dm_from_date, dm.to_date as dm_to_date FROM dept_emp de\nleft join employees e on de.emp_no = e.emp_no\nleft join departments d on de.dept_no = d.dept_no\nleft join dept_manager dm on de.dept_no = dm.dept_no and de.emp_no = dm.emp_no;"
-      resultSet = statement.executeQuery(query)
+    // Thực hiện truy vấn
+    //      val statement = connection.createStatement()
+    val rowCountQuery = "SELECT COUNT (*) AS row_count FROM (SELECT concat(de.dept_no,\"_\", de.emp_no) as dept_emp, de.from_date as de_from_date, de.to_date as de_to_date, e.emp_no, e.birth_date, e.first_name, e.last_name, e.gender, e.hire_date, d.dept_no, d.dept_name, dm.from_date as dm_from_date, dm.to_date as dm_to_date FROM dept_emp de\nleft join employees e on de.emp_no = e.emp_no\nleft join departments d on de.dept_no = d.dept_no\nleft join dept_manager dm on de.dept_no = dm.dept_no and de.emp_no = dm.emp_no);"
+    val rowCountStatement = connection1.createStatement()
+    val rowCountResultSet = rowCountStatement.executeQuery(rowCountQuery)
+    rowCountResultSet.next()
+    val rowCount = rowCountResultSet.getInt("row_count")
 
-      deptEmp = {
-        import spark.implicits._
-        val rows = Iterator.continually(resultSet).takeWhile(_.next()).map { row =>
-          (row.getString("dept_emp"),
-            row.getString("de_from_date"),
-            row.getString("de_to_date"),
-            row.getInt("emp_no"),
-            row.getString("birth_date"),
-            row.getString("first_name"),
-            row.getString("last_name"),
-            row.getString("gender"),
-            row.getString("hire_date"),
-            row.getString("dept_no"),
-            row.getString("dept_name"),
-            row.getString("dm_from_date"),
-            row.getString("dm_to_date")
-          )
-        }
-        val df = rows.toSeq.toDF("dept_emp", "de_from_date", "de_to_date","emp_no","birth_date","first_name","last_name","gender","hire_date","dept_no","dept_name","dm_from_date","dm_to_date")
-        df
-      }
+    // Tinh so luong phan can chia
+    val partitions = math.ceil(rowCount.toDouble / batchSize).toInt
 
-    } catch {
-      case e: Exception => e.printStackTrace()
-    } finally {
-      // Đóng kết nối
-      if (resultSet != null) resultSet.close()
-      if (connection != null) connection.close()
-    }
+    for (i <- 0 until partitions) {
+      val offset = i * batchSize
+      val limit = batchSize // Số lượng dòng dữ liệu trong mỗi phần
+      var deptEmp: DataFrame = null
 
-    deptEmp = deptEmp
-      .withColumn("country", lit("US"))
-      .repartition(5)
-
-    val batchPutSize = 100
-
-    deptEmp.foreachPartition((rows: Iterator[Row]) => {
-      // tạo connection hbase buộc phải tạo bên trong mỗi partition (không được tạo bên ngoài). Tối ưu hơn sẽ dùng connectionPool để reuse lại connection trên các worker
-      val hbaseConnection = HBaseConnectionFactory.createConnection()
       try {
-        val table = hbaseConnection.getTable(TableName.valueOf("bai5", "dept_emp"))
-        val puts = new util.ArrayList[Put]()
-        for (row <- rows) {
-          val dept_emp = row.getAs[String]("dept_emp")
-          val de_from_date = row.getAs[String]("de_from_date")
-          val de_to_date = row.getAs[String]("de_to_date")
-          val emp_no = row.getAs[Int]("emp_no")
-          val birth_date = row.getAs[String]("birth_date")
-          val first_name = row.getAs[String]("first_name")
-          val last_name = row.getAs[String]("last_name")
-          val gender = row.getAs[String]("gender")
-          val hire_date = row.getAs[String]("hire_date")
-          val dept_no = row.getAs[String]("dept_no")
-          val dept_name = row.getAs[String]("dept_name")
-          val dm_from_date = row.getAs[String]("dm_from_date")
-          val dm_to_date = row.getAs[String]("dm_to_date")
+        connection = DriverManager.getConnection(url, username, password)
+        val query = "SELECT concat(de.dept_no,\"_\", de.emp_no) as dept_emp, de.from_date as de_from_date, de.to_date as de_to_date, e.emp_no, e.birth_date, e.first_name, e.last_name, e.gender, e.hire_date, d.dept_no, d.dept_name, dm.from_date as dm_from_date, dm.to_date as dm_to_date FROM dept_emp de\nleft join employees e on de.emp_no = e.emp_no\nleft join departments d on de.dept_no = d.dept_no\nleft join dept_manager dm on de.dept_no = dm.dept_no and de.emp_no = dm.emp_no LIMIT " + limit + " OFFSET " + offset
+        val statement = connection.createStatement()
+        val resultSet = statement.executeQuery(query)
 
-
-          val put = new Put(Bytes.toBytes(dept_emp))
-          put.addColumn(Bytes.toBytes("cf_info"), Bytes.toBytes("de_from_date"), Bytes.toBytes(de_from_date))
-          put.addColumn(Bytes.toBytes("cf_info"), Bytes.toBytes("de_to_date"), Bytes.toBytes(de_to_date))
-          put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"), Bytes.toBytes(emp_no))
-          put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"), Bytes.toBytes(birth_date))
-          put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"), Bytes.toBytes(first_name))
-          put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"), Bytes.toBytes(last_name))
-          put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"), Bytes.toBytes(gender))
-          put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date"), Bytes.toBytes(hire_date))
-          put.addColumn(Bytes.toBytes("cf_department"), Bytes.toBytes("dept_no"), Bytes.toBytes(dept_no))
-          put.addColumn(Bytes.toBytes("cf_department"), Bytes.toBytes("dept_name"), Bytes.toBytes(dept_name))
-          if(dm_from_date != null){
-            put.addColumn(Bytes.toBytes("manager"), Bytes.toBytes("dm_from_date"), Bytes.toBytes(dm_from_date))
+        deptEmp = {
+          import spark.implicits._
+          val rows = Iterator.continually(resultSet).takeWhile(_.next()).map { row =>
+            (row.getString("dept_emp"),
+              row.getString("de_from_date"),
+              row.getString("de_to_date"),
+              row.getInt("emp_no"),
+              row.getString("birth_date"),
+              row.getString("first_name"),
+              row.getString("last_name"),
+              row.getString("gender"),
+              row.getString("hire_date"),
+              row.getString("dept_no"),
+              row.getString("dept_name"),
+              row.getString("dm_from_date"),
+              row.getString("dm_to_date")
+            )
           }
-          if(dm_to_date != null) {
-            put.addColumn(Bytes.toBytes("manager"), Bytes.toBytes("dm_to_date"), Bytes.toBytes(dm_to_date))
-          }
-          puts.add(put)
-          if (puts.size > batchPutSize) {
-            table.put(puts)
-            puts.clear()
-          }
+          val df = rows.toSeq.toDF("dept_emp", "de_from_date", "de_to_date", "emp_no", "birth_date", "first_name", "last_name", "gender", "hire_date", "dept_no", "dept_name", "dm_from_date", "dm_to_date")
+          df
         }
-        if (puts.size() > 0) {  // đẩy nốt phần còn lại
-          table.put(puts)
-        }
+      } catch {
+        case e: Exception => e.printStackTrace()
       } finally {
-        hbaseConnection.close()
+        // Đóng kết nối
+        if (resultSet != null) resultSet.close()
+        if (connection != null) connection.close()
       }
-    })
 
+      deptEmp = deptEmp
+        .withColumn("country", lit("US"))
+        .repartition(5)
+
+      val batchPutSize = 100
+
+      deptEmp.foreachPartition((rows: Iterator[Row]) => {
+        // tạo connection hbase buộc phải tạo bên trong mỗi partition (không được tạo bên ngoài). Tối ưu hơn sẽ dùng connectionPool để reuse lại connection trên các worker
+        val hbaseConnection = HBaseConnectionFactory.createConnection()
+        try {
+          val table = hbaseConnection.getTable(TableName.valueOf("bai5", "dept_emp"))
+          val puts = new util.ArrayList[Put]()
+          for (row <- rows) {
+            val dept_emp = row.getAs[String]("dept_emp")
+            val de_from_date = row.getAs[String]("de_from_date")
+            val de_to_date = row.getAs[String]("de_to_date")
+            val emp_no = row.getAs[Int]("emp_no")
+            val birth_date = row.getAs[String]("birth_date")
+            val first_name = row.getAs[String]("first_name")
+            val last_name = row.getAs[String]("last_name")
+            val gender = row.getAs[String]("gender")
+            val hire_date = row.getAs[String]("hire_date")
+            val dept_no = row.getAs[String]("dept_no")
+            val dept_name = row.getAs[String]("dept_name")
+            val dm_from_date = row.getAs[String]("dm_from_date")
+            val dm_to_date = row.getAs[String]("dm_to_date")
+
+
+            val put = new Put(Bytes.toBytes(dept_emp))
+            put.addColumn(Bytes.toBytes("cf_info"), Bytes.toBytes("de_from_date"), Bytes.toBytes(de_from_date))
+            put.addColumn(Bytes.toBytes("cf_info"), Bytes.toBytes("de_to_date"), Bytes.toBytes(de_to_date))
+            put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"), Bytes.toBytes(emp_no))
+            put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"), Bytes.toBytes(birth_date))
+            put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"), Bytes.toBytes(first_name))
+            put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"), Bytes.toBytes(last_name))
+            put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"), Bytes.toBytes(gender))
+            put.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date"), Bytes.toBytes(hire_date))
+            put.addColumn(Bytes.toBytes("cf_department"), Bytes.toBytes("dept_no"), Bytes.toBytes(dept_no))
+            put.addColumn(Bytes.toBytes("cf_department"), Bytes.toBytes("dept_name"), Bytes.toBytes(dept_name))
+            if (dm_from_date != null) {
+              put.addColumn(Bytes.toBytes("manager"), Bytes.toBytes("dm_from_date"), Bytes.toBytes(dm_from_date))
+            }
+            if (dm_to_date != null) {
+              put.addColumn(Bytes.toBytes("manager"), Bytes.toBytes("dm_to_date"), Bytes.toBytes(dm_to_date))
+            }
+            puts.add(put)
+            if (puts.size > batchPutSize) {
+              table.put(puts)
+              puts.clear()
+            }
+          }
+          if (puts.size() > 0) { // đẩy nốt phần còn lại
+            table.put(puts)
+          }
+        } finally {
+          hbaseConnection.close()
+        }
+      })
+    }
   }
 
+
   def main(args: Array[String]): Unit = {
-//    readHDFSThenPutToHBase()
-//    createParqetFileAndPutToHdfs()
-//    readHBase42(8133866058245435043L)
-    readMySqlThenPutToHBase()
+    //    readHDFSThenPutToHBase()
+    //    createParqetFileAndPutToHdfs()
+    //    readHBase42(8133866058245435043L)
+    readMySqlDeptEmp()
   }
 }
