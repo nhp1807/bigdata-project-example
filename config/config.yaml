@@ -1,0 +1,11 @@
+
+personInfoLogPath: hdfs://namenode:9000/data/person-info.parquet
+personIdListLogPath: hdfs://namenode:9000/data/person-id-list.parquet
+ageAnalysisPath: hdfs://namenode:9000/data/analysis-person-info.parquet
+output: hdfs://namenode:9000/output.txt
+merge-text: hdfs://namenode:9000/sample-text/merge-text.dat
+pageViewLogPath: hdfs://namenode:9000/sample-text/pageviewlog.parquet
+result: hdfs://namenode:9000/sample-text/result.dat
+url: jdbc:mysql://localhost:3306/employees
+username: root
+password: haiphong1234
