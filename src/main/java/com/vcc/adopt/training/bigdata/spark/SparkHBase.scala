@@ -535,7 +535,7 @@ object SparkHBase {
     // Load driver
     Class.forName("com.mysql.cj.jdbc.Driver")
 
-    val batchSize = 80000 // Số lượng dòng dữ liệu mỗi lần truy vấn
+    val batchSize = 50000 // Số lượng dòng dữ liệu mỗi lần truy vấn
     // Tạo kết nối
     connection1 = DriverManager.getConnection(url, username, password)
 
@@ -585,7 +585,7 @@ object SparkHBase {
         .withColumn("country", lit("US"))
         .repartition(5)
 
-      val batchPutSize = 10000
+      val batchPutSize = 100
 
       titles.foreachPartition((rows: Iterator[Row]) => {
         // tạo connection hbase buộc phải tạo bên trong mỗi partition (không được tạo bên ngoài). Tối ưu hơn sẽ dùng connectionPool để reuse lại connection trên các worker
