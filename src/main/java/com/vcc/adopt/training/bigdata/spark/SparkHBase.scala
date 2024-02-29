@@ -376,7 +376,7 @@ object SparkHBase {
         .withColumn("country", lit("US"))
         .repartition(5)
 
-      val batchPutSize = 100
+      val batchPutSize = 40000
 
       deptEmp.foreachPartition((rows: Iterator[Row]) => {
         // tạo connection hbase buộc phải tạo bên trong mỗi partition (không được tạo bên ngoài). Tối ưu hơn sẽ dùng connectionPool để reuse lại connection trên các worker
