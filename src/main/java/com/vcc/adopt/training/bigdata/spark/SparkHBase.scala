@@ -860,7 +860,8 @@ object SparkHBase {
 //        readMySqlDeptEmp()
 //        readMySqlSalaries()
 //        readMySqlTitles()
+    readHbase51("d001")
 //    readHbase52("1986-08-26")
-    readHbase53(100001)
+//    readHbase53(100001)
   }
 }
