@@ -846,8 +846,8 @@ object SparkHBase {
     //    readHDFSThenPutToHBase()
     //    createParqetFileAndPutToHdfs()
     //    readHBase42(8133866058245435043L)
-        readMySqlDeptEmp()
+//        readMySqlDeptEmp()
     //    readMySqlSalaries()
-//        readMySqlTitles()
+        readMySqlTitles()
   }
 }
