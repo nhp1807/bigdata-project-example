@@ -791,7 +791,66 @@ object SparkHBase {
     // Tính tổng các mức lương từ RDD
     totalSalaries = totalSalariesRDD.reduce(_ + _)
     println(totalSalaries)
+  }
 
+  private def readHbase53(empNo: Int): Unit = {
+    println("----- Lấy chức vụ của một nhân viên cần truy vấn ----")
+
+    var row_key : DataFrame = null
+
+    try {
+      // Load driver
+      Class.forName("com.mysql.cj.jdbc.Driver")
+
+      // Tạo kết nối
+      connection = DriverManager.getConnection(url, username, password)
+
+      // Thực hiện truy vấn
+      val statement = connection.createStatement()
+      val query = "SELECT distinct from_date FROM titles"
+      resultSet = statement.executeQuery(query)
+
+      row_key = {
+        import spark.implicits._
+        val rows = Iterator.continually(resultSet).takeWhile(_.next()).map { row =>
+          (row.getString("from_date"))
+        }
+        val df = rows.toSeq.toDF("from_date")
+        df
+      }
+
+    } catch {
+      case e: Exception => e.printStackTrace()
+    } finally {
+      // Đóng kết nối
+      if (resultSet != null) resultSet.close()
+      if (connection != null) connection.close()
+    }
+    import spark.implicits._
+    val titleDF = row_key
+      .repartition(5)
+      .mapPartitions((rows: Iterator[Row]) => {
+        val hbaseConnection = HBaseConnectionFactory.createConnection()
+        val table = hbaseConnection.getTable(TableName.valueOf("bai5", "titles"))
+        try {
+          rows.flatMap(row => {
+            val get = new Get(Bytes.toBytes(empNo + "_" + row.getAs[String]("from_date")))
+            get.addColumn(Bytes.toBytes("cf_info"), Bytes.toBytes("title"))
+            if (table.get(get).getValue(Bytes.toBytes("cf_info"), Bytes.toBytes("title")) != null) {
+              Some(
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_info"), Bytes.toBytes("title")))
+              )
+            }
+            else {
+              None
+            }
+          })
+        }finally {
+          //          hbaseConnection.close()
+        }
+      }).toDF("title")
+
+    titleDF.show()
   }
 
   def main(args: Array[String]): Unit = {
@@ -801,6 +860,7 @@ object SparkHBase {
 //        readMySqlDeptEmp()
 //        readMySqlSalaries()
 //        readMySqlTitles()
-    readHbase52("1986-08-26")
+//    readHbase52("1986-08-26")
+    readHbase53(100001)
   }
 }
