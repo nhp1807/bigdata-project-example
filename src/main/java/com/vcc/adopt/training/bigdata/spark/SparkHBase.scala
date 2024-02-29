@@ -732,10 +732,10 @@ object SparkHBase {
 
   }
 
-  private def readHbase52(deptNo: String): Unit = {
-    println("----- Lấy được danh sách, nhân viên & quản lý của 1 phòng ban cần truy vấn ----")
+  private def readHbase52(date: String): Unit = {
+    println("----- Tính tổng lương phải trả cho tất cả nhân viên hàng tháng ----")
 
-    var employees : DataFrame = null
+    var row_key : DataFrame = null
 
     try {
       // Load driver
@@ -746,15 +746,15 @@ object SparkHBase {
 
       // Thực hiện truy vấn
       val statement = connection.createStatement()
-      val query = "Select emp_no from employees;"
+      val query = "SELECT concat(s.emp_no, \"_\", s.from_date) as row_key FROM salaries s where s.from_date < '" + date +"' and s.to_date > '" + date + "'"
       resultSet = statement.executeQuery(query)
 
-      employees = {
+      row_key = {
         import spark.implicits._
         val rows = Iterator.continually(resultSet).takeWhile(_.next()).map { row =>
-          (row.getInt("emp_no"))
+          (row.getString("row_key"))
         }
-        val df = rows.toSeq.toDF("emp_no")
+        val df = rows.toSeq.toDF("row_key")
         df
       }
 
@@ -765,80 +765,32 @@ object SparkHBase {
       if (resultSet != null) resultSet.close()
       if (connection != null) connection.close()
     }
-
+    var totalSalaries: Long = 0
     import spark.implicits._
-    val empListDF = employees
+    val totalSalariesRDD = row_key
       .repartition(5)
-      .mapPartitions((rows: Iterator[Row]) => {
+      .mapPartitions(rows => {
         val hbaseConnection = HBaseConnectionFactory.createConnection()
-        val table = hbaseConnection.getTable(TableName.valueOf("bai5", "dept_emp"))
+        val table = hbaseConnection.getTable(TableName.valueOf("bai5", "salaries"))
         try {
-          rows.flatMap(row => {
-            val get = new Get(Bytes.toBytes(deptNo + "_" + row.getAs[String]("emp_no")))
-            get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"))
-            if (table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no")) != null) {
-              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"))
-              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"))
-              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"))
-              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"))
-              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date"))
-              Some(
-                Bytes.toInt(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date")))
-              )
-            }
-            else {
-              None
+          rows.map(row => {
+            val get = new Get(Bytes.toBytes(row.getAs[String]("row_key")))
+            get.addColumn(Bytes.toBytes("cf_info"), Bytes.toBytes("salary"))
+            val salaryBytes = table.get(get).getValue(Bytes.toBytes("cf_info"), Bytes.toBytes("salary"))
+            if (salaryBytes != null) {
+              Bytes.toInt(salaryBytes)
+            } else {
+              0L
             }
           })
-        }finally {
-          //          hbaseConnection.close()
+        } finally {
+          // hbaseConnection.close() // Đóng kết nối sau khi sử dụng
         }
-      }).toDF("emp_no", "birth_date","first_name","last_name","gender","hire_date")
+      })
 
-    empListDF.persist()
-    empListDF.show(empListDF.count().toInt)
-
-    val managerListDF = employees
-      .repartition(5)
-      .mapPartitions((rows: Iterator[Row]) => {
-        val hbaseConnection = HBaseConnectionFactory.createConnection()
-        val table = hbaseConnection.getTable(TableName.valueOf("bai5", "dept_emp"))
-        try {
-          rows.flatMap(row => {
-            val get = new Get(Bytes.toBytes(deptNo + "_" + row.getAs[String]("emp_no")))
-            get.addColumn(Bytes.toBytes("cf_manager"), Bytes.toBytes("dm_from_date"))
-            if (table.get(get).getValue(Bytes.toBytes("manager"), Bytes.toBytes("dm_from_date")) != null) {
-              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("emp_no"))
-              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("birth_date"))
-              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("first_name"))
-              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("last_name"))
-              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("gender"))
-              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("hire_date"))
-              Some(
-                Bytes.toInt(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("emp_no"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("birth_date"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("first_name"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("last_name"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("gender"))),
-                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("hire_date")))
-              )
-            }
-            else {
-              None
-            }
-          })
-        }finally {
-          //          hbaseConnection.close()
-        }
-      }).toDF("emp_no", "birth_date","first_name","last_name","gender","hire_date")
-
-    managerListDF.persist()
-    managerListDF.show(managerListDF.count().toInt)
+    // Tính tổng các mức lương từ RDD
+    totalSalaries = totalSalariesRDD.reduce(_ + _)
+    println(totalSalaries)
 
   }
 
