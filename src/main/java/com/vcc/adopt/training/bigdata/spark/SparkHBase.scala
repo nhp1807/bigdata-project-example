@@ -322,7 +322,6 @@ object SparkHBase {
     connection1 = DriverManager.getConnection(url, username, password)
 
     // Thực hiện truy vấn
-    //      val statement = connection.createStatement()
     val rowCountQuery = "SELECT COUNT(*) AS row_count\nFROM (\n    SELECT\n        CONCAT(de.dept_no, \"_\", de.emp_no) AS dept_emp,\n        de.from_date AS de_from_date,\n        de.to_date AS de_to_date,\n        e.emp_no,\n        e.birth_date,\n        e.first_name,\n        e.last_name,\n        e.gender,\n        e.hire_date,\n        d.dept_no,\n        d.dept_name,\n        dm.from_date AS dm_from_date,\n        dm.to_date AS dm_to_date\n    FROM dept_emp de\n    LEFT JOIN employees e ON de.emp_no = e.emp_no\n    LEFT JOIN departments d ON de.dept_no = d.dept_no\n    LEFT JOIN dept_manager dm ON de.dept_no = dm.dept_no AND de.emp_no = dm.emp_no\n) AS subquery;"
     val rowCountStatement = connection1.createStatement()
     val rowCountResultSet = rowCountStatement.executeQuery(rowCountQuery)
@@ -376,7 +375,7 @@ object SparkHBase {
         .withColumn("country", lit("US"))
         .repartition(5)
 
-      val batchPutSize = 40000
+      val batchPutSize = 10000
 
       deptEmp.foreachPartition((rows: Iterator[Row]) => {
         // tạo connection hbase buộc phải tạo bên trong mỗi partition (không được tạo bên ngoài). Tối ưu hơn sẽ dùng connectionPool để reuse lại connection trên các worker
