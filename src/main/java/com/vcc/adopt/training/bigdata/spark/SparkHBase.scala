@@ -530,7 +530,7 @@ object SparkHBase {
   private def readMySqlTitles(): Unit = {
     println("----- Read employees on mySql then put to table bai5:titles ----")
 
-    var salaries: DataFrame = null
+    var titles: DataFrame = null
 
     // Load driver
     Class.forName("com.mysql.cj.jdbc.Driver")
@@ -566,7 +566,7 @@ object SparkHBase {
             (row.getString("row_key"),
               row.getString("from_date"),
               row.getString("to_date"),
-              row.getInt("title"),
+              row.getString("title"),
               row.getInt("emp_no"),
             )
           }
@@ -597,7 +597,7 @@ object SparkHBase {
             val row_key = row.getAs[String]("row_key")
             val from_date = row.getAs[String]("from_date")
             val to_date = row.getAs[String]("to_date")
-            val title = row.getAs[Int]("title")
+            val title = row.getAs[String]("title")
             val emp_no = row.getAs[Int]("emp_no")
 
             val put = new Put(Bytes.toBytes(row_key))
