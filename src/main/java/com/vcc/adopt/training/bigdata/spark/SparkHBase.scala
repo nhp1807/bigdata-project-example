@@ -317,7 +317,7 @@ object SparkHBase {
     // Load driver
     Class.forName("com.mysql.cj.jdbc.Driver")
 
-    val batchSize = 80000 // Số lượng dòng dữ liệu mỗi lần truy vấn
+    val batchSize = 50000 // Số lượng dòng dữ liệu mỗi lần truy vấn
     // Tạo kết nối
     connection1 = DriverManager.getConnection(url, username, password)
 
@@ -375,7 +375,7 @@ object SparkHBase {
         .withColumn("country", lit("US"))
         .repartition(5)
 
-      val batchPutSize = 10000
+      val batchPutSize = 100
 
       deptEmp.foreachPartition((rows: Iterator[Row]) => {
         // tạo connection hbase buộc phải tạo bên trong mỗi partition (không được tạo bên ngoài). Tối ưu hơn sẽ dùng connectionPool để reuse lại connection trên các worker
@@ -622,12 +622,232 @@ object SparkHBase {
     }
   }
 
+  private def readHbase51(deptNo: String): Unit = {
+    println("----- Lấy được danh sách, nhân viên & quản lý của 1 phòng ban cần truy vấn ----")
+
+    var row_key : DataFrame = null
+
+    try {
+      // Load driver
+      Class.forName("com.mysql.cj.jdbc.Driver")
+
+      // Tạo kết nối
+      connection = DriverManager.getConnection(url, username, password)
+
+      // Thực hiện truy vấn
+      val statement = connection.createStatement()
+      val query = "select concat(" + deptNo + ",\"_\", emp_no) as row_key from dept_emp where dept_no = " + deptNo
+      resultSet = statement.executeQuery(query)
+
+      row_key = {
+        import spark.implicits._
+        val rows = Iterator.continually(resultSet).takeWhile(_.next()).map { row =>
+          (row.getString("row_key"))
+        }
+        val df = rows.toSeq.toDF("row_key")
+        df
+      }
+
+    } catch {
+      case e: Exception => e.printStackTrace()
+    } finally {
+      // Đóng kết nối
+      if (resultSet != null) resultSet.close()
+      if (connection != null) connection.close()
+    }
+
+    import spark.implicits._
+    val empListDF = row_key
+      .repartition(5)
+      .mapPartitions((rows: Iterator[Row]) => {
+        val hbaseConnection = HBaseConnectionFactory.createConnection()
+        val table = hbaseConnection.getTable(TableName.valueOf("bai5", "dept_emp"))
+        try {
+          rows.flatMap(row => {
+            val get = new Get(Bytes.toBytes(row.getAs[String]("row_key")))
+            get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"))
+            get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"))
+            get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"))
+            get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"))
+            get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"))
+            get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date"))
+            if (table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no")) != null) {
+              Some(
+                Bytes.toInt(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date")))
+              )
+            }
+            else {
+              None
+            }
+          })
+        }finally {
+          //          hbaseConnection.close()
+        }
+      }).toDF("emp_no", "birth_date","first_name","last_name","gender","hire_date")
+
+    empListDF.persist()
+    empListDF.show(empListDF.count().toInt)
+
+    val managerListDF = row_key
+      .repartition(5)
+      .mapPartitions((rows: Iterator[Row]) => {
+        val hbaseConnection = HBaseConnectionFactory.createConnection()
+        val table = hbaseConnection.getTable(TableName.valueOf("bai5", "dept_emp"))
+        try {
+          rows.flatMap(row => {
+            val get = new Get(Bytes.toBytes(row.getAs[String]("row_key")))
+            get.addColumn(Bytes.toBytes("cf_manager"), Bytes.toBytes("dm_from_date"))
+            if (table.get(get).getValue(Bytes.toBytes("cf_manager"), Bytes.toBytes("dm_from_date")) != null) {
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"))
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"))
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"))
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"))
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"))
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date"))
+              Some(
+                Bytes.toInt(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date")))
+              )
+            }
+            else {
+              None
+            }
+          })
+        }finally {
+          //          hbaseConnection.close()
+        }
+      }).toDF("emp_no", "birth_date","first_name","last_name","gender","hire_date")
+
+    managerListDF.persist()
+    managerListDF.show(managerListDF.count().toInt)
+
+  }
+
+  private def readHbase52(deptNo: String): Unit = {
+    println("----- Lấy được danh sách, nhân viên & quản lý của 1 phòng ban cần truy vấn ----")
+
+    var employees : DataFrame = null
+
+    try {
+      // Load driver
+      Class.forName("com.mysql.cj.jdbc.Driver")
+
+      // Tạo kết nối
+      connection = DriverManager.getConnection(url, username, password)
+
+      // Thực hiện truy vấn
+      val statement = connection.createStatement()
+      val query = "Select emp_no from employees;"
+      resultSet = statement.executeQuery(query)
+
+      employees = {
+        import spark.implicits._
+        val rows = Iterator.continually(resultSet).takeWhile(_.next()).map { row =>
+          (row.getInt("emp_no"))
+        }
+        val df = rows.toSeq.toDF("emp_no")
+        df
+      }
+
+    } catch {
+      case e: Exception => e.printStackTrace()
+    } finally {
+      // Đóng kết nối
+      if (resultSet != null) resultSet.close()
+      if (connection != null) connection.close()
+    }
+
+    import spark.implicits._
+    val empListDF = employees
+      .repartition(5)
+      .mapPartitions((rows: Iterator[Row]) => {
+        val hbaseConnection = HBaseConnectionFactory.createConnection()
+        val table = hbaseConnection.getTable(TableName.valueOf("bai5", "dept_emp"))
+        try {
+          rows.flatMap(row => {
+            val get = new Get(Bytes.toBytes(deptNo + "_" + row.getAs[String]("emp_no")))
+            get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"))
+            if (table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no")) != null) {
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"))
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"))
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"))
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"))
+              get.addColumn(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date"))
+              Some(
+                Bytes.toInt(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("emp_no"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("birth_date"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("first_name"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("last_name"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("gender"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("cf_employee"), Bytes.toBytes("hire_date")))
+              )
+            }
+            else {
+              None
+            }
+          })
+        }finally {
+          //          hbaseConnection.close()
+        }
+      }).toDF("emp_no", "birth_date","first_name","last_name","gender","hire_date")
+
+    empListDF.persist()
+    empListDF.show(empListDF.count().toInt)
+
+    val managerListDF = employees
+      .repartition(5)
+      .mapPartitions((rows: Iterator[Row]) => {
+        val hbaseConnection = HBaseConnectionFactory.createConnection()
+        val table = hbaseConnection.getTable(TableName.valueOf("bai5", "dept_emp"))
+        try {
+          rows.flatMap(row => {
+            val get = new Get(Bytes.toBytes(deptNo + "_" + row.getAs[String]("emp_no")))
+            get.addColumn(Bytes.toBytes("cf_manager"), Bytes.toBytes("dm_from_date"))
+            if (table.get(get).getValue(Bytes.toBytes("manager"), Bytes.toBytes("dm_from_date")) != null) {
+              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("emp_no"))
+              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("birth_date"))
+              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("first_name"))
+              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("last_name"))
+              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("gender"))
+              get.addColumn(Bytes.toBytes("employee"), Bytes.toBytes("hire_date"))
+              Some(
+                Bytes.toInt(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("emp_no"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("birth_date"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("first_name"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("last_name"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("gender"))),
+                Bytes.toString(table.get(get).getValue(Bytes.toBytes("employee"), Bytes.toBytes("hire_date")))
+              )
+            }
+            else {
+              None
+            }
+          })
+        }finally {
+          //          hbaseConnection.close()
+        }
+      }).toDF("emp_no", "birth_date","first_name","last_name","gender","hire_date")
+
+    managerListDF.persist()
+    managerListDF.show(managerListDF.count().toInt)
+
+  }
+
   def main(args: Array[String]): Unit = {
     //    readHDFSThenPutToHBase()
     //    createParqetFileAndPutToHdfs()
     //    readHBase42(8133866058245435043L)
-    //    readMySqlDeptEmp()
+        readMySqlDeptEmp()
     //    readMySqlSalaries()
-        readMySqlTitles()
+//        readMySqlTitles()
   }
 }
