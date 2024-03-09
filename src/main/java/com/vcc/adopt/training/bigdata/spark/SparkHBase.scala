@@ -53,6 +53,38 @@ object SparkHBase {
     StructField("category", IntegerType, nullable = true)
   ))
 
+  private def findKmean(k: Int): Unit = {
+    println("Start")
+    val data: DataFrame = spark.read.text(output)
+      .toDF("data")
+
+    // Chuyển đổi dữ liệu từ cột 'data' sang cột 'x' và 'y'
+    val parsedData = data.selectExpr("cast(split(data, ',')[0] as double) as x", "cast(split(data, ',')[1] as double) as y")
+
+    // Hiển thị dữ liệu
+    //    parsedData.show()
+
+    // Tạo một đối tượng KMeans
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("x", "y"))
+      .setOutputCol("features")
+
+    val dataWithFeatures = assembler.transform(parsedData)
+    //    dataWithFeatures.show()
+
+    val kmeans = new KMeans()
+      .setK(k) // Số lượng cụm
+      .setSeed(1L) // Seed để tái tạo kết quả
+
+    val model = kmeans.fit(dataWithFeatures)
+
+    val centroids = model.clusterCenters
+    centroids.foreach(println)
+
+    val predictions = model.transform(dataWithFeatures)
+    predictions.show()
+  }
+
   /**
    * Tạo file parquet từ file tổng hợp
    */
@@ -168,6 +200,88 @@ object SparkHBase {
         hbaseConnection.close()
       }
     })
+  }
+
+  /**
+   * Đọc dữ liệu từ file parquet và truy vấn
+   */
+  def datalog(): Unit = {
+    // Khởi tạo SparkSession
+    val spark = SparkSession.builder()
+      .appName("ParquetKMeansProcessing")
+      .getOrCreate()
+    // Định nghĩa schema cho file Parquet
+    val schema = StructType(Seq(
+      StructField("timeCreate", TimestampType, nullable = true),
+      StructField("cookieCreate", TimestampType, nullable = true),
+      StructField("browserCode", IntegerType, nullable = true),
+      StructField("browserVer", StringType, nullable = true),
+      StructField("osCode", IntegerType, nullable = true),
+      StructField("osVer", StringType, nullable = true),
+      StructField("ip", LongType, nullable = true),
+      StructField("locId", IntegerType, nullable = true),
+      StructField("domain", StringType, nullable = true),
+      StructField("siteId", IntegerType, nullable = true),
+      StructField("cId", IntegerType, nullable = true),
+      StructField("path", StringType, nullable = true),
+      StructField("referer", StringType, nullable = true),
+      StructField("guid", LongType, nullable = true),
+      StructField("flashVersion", StringType, nullable = true),
+      StructField("jre", StringType, nullable = true),
+      StructField("sr", StringType, nullable = true),
+      StructField("sc", StringType, nullable = true),
+      StructField("geographic", IntegerType, nullable = true),
+      StructField("category", IntegerType, nullable = true)
+    ))
+
+    // Đọc dữ liệu từ file Parquet với schema đã định nghĩa
+    val df: DataFrame = spark.read.schema(schema).parquet(pageViewLogPath)
+
+    // Hiển thị schema của DataFrame để xác định các trường dữ liệu
+    df.printSchema()
+
+    // 3.1. Lấy url đã truy cập nhiều nhất trong ngày của mỗi guid
+    val dfWithDate = df.withColumn("timeCreate", to_date(col("timeCreate")))
+    val urlCountPerGuid = dfWithDate.groupBy("guid", "timeCreate", "path").agg(count("*").alias("access_count"))
+    val windowSpec = Window.partitionBy("guid", "timeCreate").orderBy(col("access_count").desc)
+    val topUrlPerGuid = urlCountPerGuid.withColumn("rank", row_number().over(windowSpec)).where(col("rank") === 1)
+    topUrlPerGuid.show()
+
+    // 3.2. Các IP được sử dụng bởi nhiều guid nhất
+    val ipCountPerGuid = df.groupBy("ip").agg(countDistinct("guid").alias("guid_count"))
+    val topIPs = ipCountPerGuid.orderBy(col("guid_count").desc).limit(1000)
+    topIPs.show()
+
+    // 3.3. Lấy top 100 các domain được truy cập nhiều nhất
+    val topDomains = df.groupBy("domain").count().orderBy(col("count").desc).limit(100)
+    topDomains.show()
+
+    // 3.4. Lấy top 10 các LocId có số lượng IP không trùng nhiều nhất
+    val topLocIds = df.groupBy("locId").agg(countDistinct("ip").alias("unique_ip_count")).orderBy(col("unique_ip_count").desc).limit(10)
+    topLocIds.show()
+
+    // 3.5. Tìm trình duyệt phổ biến nhất trong mỗi hệ điều hành (osCode và browserCode)
+    val popularBrowserByOS = df.groupBy("osCode", "browserCode").count()
+    val windowSpecOS = Window.partitionBy("osCode").orderBy(col("count").desc)
+    val topBrowserByOS = popularBrowserByOS.withColumn("rank", row_number().over(windowSpecOS)).where(col("rank") === 1).drop("count")
+    topBrowserByOS.show()
+
+    // 3.6. Lọc các dữ liệu có timeCreate nhiều hơn cookieCreate 10 phút, và chỉ lấy field guid, domain, path, timecreate và lưu lại thành file result.dat định dạng text và tải xuống.
+    val filteredData = df.filter(col("timeCreate").cast("long") > col("cookieCreate").cast("long") + lit(600000))
+      .select("guid", "domain", "path", "timeCreate")
+
+    val stringTypedData = filteredData.selectExpr(
+      "CAST(guid AS STRING) AS guid",
+      "CAST(domain AS STRING) AS domain",
+      "CAST(path AS STRING) AS path",
+      "CAST(timeCreate AS STRING) AS timeCreate"
+    )
+    val tabSeparatedData = stringTypedData.withColumn("concatenated",
+      concat_ws("\t", col("guid"), col("domain"), col("path"), col("timeCreate"))
+    ).select("concatenated")
+    tabSeparatedData.write.text(result)
+
+    spark.stop()
   }
 
   private def readHBase41(guid: Long, date: java.sql.Timestamp): Unit = {
